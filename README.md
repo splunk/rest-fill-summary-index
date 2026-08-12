@@ -127,7 +127,7 @@ my_search_3
 - `-namefield <string>` field holding saved search name in summary events.
 - `-timefield <string>` field holding scheduled timestamp in summary events.
 - `-nolocal true` switch dedup template to distributed search variant.
-- `-insecure true` disable TLS cert verification (only for troubleshooting).
+- `-ca-file <path>` trust a private or self-signed CA certificate bundle.
 
 Boolean accepted values:
 
@@ -153,7 +153,7 @@ Boolean accepted values:
   - Verify host points to management API endpoint.
 - TLS/certificate errors:
   - Confirm trust chain for your endpoint.
-  - Temporary test only: add `-insecure true`.
+  - For a private or self-signed CA, provide its certificate bundle with `-ca-file <path>`.
 - No searches found with `-name "*"`:
   - Search must be enabled, scheduled, and include `summary_index` action.
   - Check app/owner scope.

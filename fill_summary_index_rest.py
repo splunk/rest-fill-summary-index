@@ -32,7 +32,7 @@ reverseorder: bool = False
 sched_start_time: Optional[int] = None
 sched_end_time: Optional[int] = None
 showprogress: bool = False
-verify_ssl: bool = False
+ca_file: Optional[str] = None
 
 app: Optional[str] = None
 host: Optional[str] = None
@@ -107,7 +107,7 @@ Advanced:
   -namefield <string>     Field containing saved search name in summary events
   -timefield <string>     Field containing scheduled timestamp in summary events
   -nolocal <boolean>      Use distributed dedup search template
-  -insecure <boolean>     Disable TLS certificate verification
+  -ca-file <path>         CA certificate bundle for private or self-signed CAs
 
 Boolean values:
   true values: 1, t, true, yes
@@ -250,9 +250,9 @@ def enforce_schedule_window(start_hhmm, end_hhmm):
 
 
 class SplunkRestClient:
-    def __init__(self, base_url, verify=True):
+    def __init__(self, base_url, ca_file_path=None):
         self.base_url = base_url.rstrip("/")
-        self.verify = verify
+        self.ssl_context = ssl.create_default_context(cafile=ca_file_path)
         self._session_key = None
         self._basic_auth_header = None
 
@@ -288,12 +288,8 @@ class SplunkRestClient:
             headers["Content-Type"] = "application/x-www-form-urlencoded"
 
         req = Request(full_url, data=payload, method=method.upper(), headers=headers)
-        ssl_context = None
-        if not self.verify:
-            ssl_context = ssl._create_unverified_context()
-
         try:
-            with urlopen(req, timeout=60, context=ssl_context) as resp:
+            with urlopen(req, timeout=60, context=self.ssl_context) as resp:
                 body = resp.read().decode("utf-8")
         except HTTPError as exc:
             msg = exc.read().decode("utf-8", errors="replace").strip()
@@ -323,7 +319,7 @@ class SplunkRestClient:
             if "CERTIFICATE_VERIFY_FAILED" in reason_str or "certificate verify failed" in reason_str:
                 raise SplunkRestError(
                     "SSL certificate verification failed for %s. "
-                    "If using a self-signed certificate, add -insecure true to skip verification." % full_url
+                    "If using a private or self-signed CA, provide its certificate bundle with -ca-file." % full_url
                 )
             raise SplunkRestError("REST request failed for %s: %s" % (full_url, str(exc)))
 
@@ -450,7 +446,7 @@ def parse_args():
     global app, owner, et, lt, user, password, session_key, trigger
     global sleep, maxjobs, indexarg, dedup, reverseorder, sched_start_time
     global sched_end_time, showprogress, dedupsearch, namefield, timefield
-    global host, verify_ssl
+    global host, ca_file
 
     if len(sys.argv) == 2 and sys.argv[1] in {"-h", "-help", "help", "--help", "--h"}:
         print_usage()
@@ -517,8 +513,8 @@ def parse_args():
         elif opt == "-nolocal":
             if parse_bool(opt, val):
                 dedupsearch = distdedupsearch
-        elif opt == "-insecure":
-            verify_ssl = not parse_bool(opt, val)
+        elif opt == "-ca-file":
+            ca_file = val
         elif opt == "-j":
             try:
                 maxjobs = int(val)
@@ -605,7 +601,7 @@ def main():
 
     create_lock_file(norm_host, app)
 
-    client = SplunkRestClient(norm_host, verify=verify_ssl)
+    client = SplunkRestClient(norm_host, ca_file_path=ca_file)
 
     sk = session_key
     if sk is not None:
